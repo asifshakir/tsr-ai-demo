@@ -1,0 +1,10 @@
+{
+  "lc": 1,
+  "type": "not_implemented",
+  "id": [
+    "langchain",
+    "vectorstores",
+    "memory",
+    "MemoryVectorStore"
+  ]
+}
