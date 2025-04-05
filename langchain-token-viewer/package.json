@@ -1,0 +1,29 @@
+{
+  "name": "langchain-token-viewer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google-cloud/vision": "^5.1.0",
+    "@google/generative-ai": "^0.24.0",
+    "@langchain/openai": "^0.5.4",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "fs": "^0.0.1-security",
+    "langchain": "^0.3.20",
+    "multer": "^1.4.5-lts.2",
+    "openai": "^4.90.0",
+    "path": "^0.12.7",
+    "winston": "^3.17.0",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
+  }
+}

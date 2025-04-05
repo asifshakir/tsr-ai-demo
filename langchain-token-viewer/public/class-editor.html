@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Voice JSON Editor</title>
+    <script src="https://unpkg.com/vue@3"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        padding: 2rem;
+      }
+      #toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #323232;
+        color: #fff;
+        padding: 10px 16px;
+        border-radius: 6px;
+        opacity: 0.9;
+        display: none;
+      }
+      .mic-pulse i {
+        animation: pulse 1s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          color: red;
+        }
+        50% {
+          transform: scale(1.3);
+          color: darkred;
+        }
+        100% {
+          transform: scale(1);
+          color: red;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="container">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+              <a class="nav-link" href="/">Token Probabilities</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="audio.html">JSON Voice Editor</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link active" href="class-editor.html"
+                >Class Editor</a
+              >
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="paste.html">Translate</a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
+      <h2 class="mb-4">
+        <span :class="{ 'mic-pulse': isRecording }"
+          ><i class="bi bi-mic-fill"></i
+        ></span>
+        Class Editor
+      </h2>
+
+      <div class="mb-3">
+        <button
+          class="btn btn-success me-2"
+          @click="startListening"
+          :disabled="listening"
+        >
+          <i class="bi bi-mic-fill"></i> Start Listening
+        </button>
+        <button
+          class="btn btn-danger me-2"
+          @click="stopListening"
+          :disabled="!listening"
+        >
+          <i class="bi bi-mic-mute-fill"></i> Stop Listening
+        </button>
+        <button class="btn btn-warning me-2" @click="clearLogs">
+          <i class="bi bi-trash"></i> Clear Logs
+        </button>
+        <button class="btn btn-info text-white" @click="exportLogs">
+          <i class="bi bi-download"></i> Export Logs
+        </button>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header bg-warning text-dark">
+          <i class="bi bi-chat-text"></i> Transcript Instruction
+        </div>
+        <div class="card-body">
+          <label class="form-label">Edit Instruction (if needed):</label>
+          <textarea
+            class="form-control"
+            v-model="transcriptText"
+            rows="4"
+            placeholder="Transcription result will appear here..."
+          ></textarea>
+          <small class="text-muted d-block mt-1"
+            >{{ transcriptText.length }} characters</small
+          >
+
+          <div class="mt-3 d-flex flex-wrap gap-2">
+            <button class="btn btn-secondary" @click="transcriptText = ''">
+              <i class="bi bi-x-circle"></i> Clear
+            </button>
+            <button class="btn btn-primary" @click="submitTranscript">
+              <i class="bi bi-send-check"></i> Submit Instruction
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-12 mb-4">
+          <h4>Class Details</h4>
+          <form @submit.prevent>
+            <div class="row">
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Code</label>
+                <input class="form-control" v-model="classDetails.code" />
+              </div>
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Gender</label>
+                <select class="form-select" v-model="classDetails.gender">
+                  <option value=""></option>
+                  <option value="gents">Gents</option>
+                  <option value="ladies">Ladies</option>
+                </select>
+              </div>
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Level</label>
+                <select class="form-select" v-model="classDetails.level">
+                  <option value=""></option>
+                  <option value="salman">Salman</option>
+                  <option value="abuzar">Abuzar</option>
+                  <option value="miqdad">Miqdad</option>
+                  <option value="ammar">Ammar</option>
+                  <option value="bilal">Bilal</option>
+                </select>
+              </div>
+
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Teacher</label>
+                <input class="form-control" v-model="classDetails.teacher" />
+              </div>
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Language</label>
+                <select class="form-select" v-model="classDetails.language">
+                  <option value=""></option>
+                  <option value="english">English</option>
+                  <option value="urdu">Urdu</option>
+                  <option value="gujarati">Gujarati</option>
+                </select>
+              </div>
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Format</label>
+                <select class="form-select" v-model="classDetails.format">
+                  <option value=""></option>
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                </select>
+              </div>
+
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Started On</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  v-model="classDetails.startedOn"
+                />
+              </div>
+              <div class="col-md-4 mb-2">
+                <label class="form-label">City</label>
+                <input class="form-control" v-model="classDetails.city" />
+              </div>
+              <div class="col-md-4 mb-2">
+                <label class="form-label">Country</label>
+                <input class="form-control" v-model="classDetails.country" />
+              </div>
+
+              <div class="col-md-6 mb-2">
+                <label class="form-label">Address</label>
+                <input class="form-control" v-model="classDetails.address" />
+              </div>
+              <div class="col-md-6 mb-2">
+                <label class="form-label">Location</label>
+                <input class="form-control" v-model="classDetails.location" />
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Tags</label>
+              <div
+                class="input-group mb-1"
+                v-for="(tag, index) in classDetails.tags"
+                :key="'tag-' + index"
+              >
+                <input
+                  class="form-control"
+                  v-model="classDetails.tags[index]"
+                />
+                <button
+                  class="btn btn-danger"
+                  @click.prevent="classDetails.tags.splice(index, 1)"
+                >
+                  <i class="bi bi-x"></i>
+                </button>
+              </div>
+              <button
+                class="btn btn-sm btn-outline-primary"
+                @click.prevent="classDetails.tags.push('')"
+              >
+                <i class="bi bi-plus"></i> Add Tag
+              </button>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Students</label>
+              <div
+                class="input-group mb-1"
+                v-for="(student, index) in classDetails.students"
+                :key="'student-' + index"
+              >
+                <input
+                  class="form-control"
+                  v-model="classDetails.students[index]"
+                />
+                <button
+                  class="btn btn-danger"
+                  @click.prevent="classDetails.students.splice(index, 1)"
+                >
+                  <i class="bi bi-x"></i>
+                </button>
+              </div>
+              <button
+                class="btn btn-sm btn-outline-primary"
+                @click.prevent="classDetails.students.push('')"
+              >
+                <i class="bi bi-plus"></i> Add Student
+              </button>
+            </div>
+
+            <div class="mb-3 border p-3 rounded bg-light">
+              <label class="form-label">Schedule</label>
+              <div class="row">
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">Day</label>
+                  <input
+                    class="form-control"
+                    v-model="classDetails.schedule.day"
+                  />
+                </div>
+                <div class="col-md-2 mb-2">
+                  <label class="form-label">Hour</label>
+                  <input
+                    class="form-control"
+                    v-model="classDetails.schedule.hour"
+                  />
+                </div>
+                <div class="col-md-2 mb-2">
+                  <label class="form-label">Minute</label>
+                  <input
+                    class="form-control"
+                    v-model="classDetails.schedule.minute"
+                  />
+                </div>
+                <div class="col-md-4 mb-2">
+                  <label class="form-label">Timezone</label>
+                  <input
+                    class="form-control"
+                    v-model="classDetails.schedule.timezone"
+                  />
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div
+          class="card-header bg-dark text-white"
+          @click="logExpanded = !logExpanded"
+          style="cursor: pointer"
+        >
+          <i class="bi" :class="logExpanded ? 'bi-eye-slash' : 'bi-eye' "></i>
+          Logs (click to {{ logExpanded ? 'hide' : 'show' }})
+        </div>
+        <ul class="list-group list-group-flush" v-if="logExpanded">
+          <li
+            class="list-group-item"
+            v-for="(entry, index) in logs"
+            :key="index"
+          >
+            <strong>{{ entry.timestamp }}</strong>: {{ entry.message }}
+          </li>
+        </ul>
+      </div>
+
+      <div id="toast">{{ toastMessage }}</div>
+    </div>
+
+    <script>
+      const { createApp, ref } = Vue;
+
+      createApp({
+        setup() {
+          const listening = ref(false);
+          const logs = ref([]);
+          const logExpanded = ref(true);
+          const toastMessage = ref("");
+          const transcriptText = ref("");
+          const classDetails = ref({
+            code: "",
+            gender: "",
+            level: "",
+            teacher: "",
+            language: "",
+            startedOn: "",
+            format: "",
+            address: "",
+            city: "",
+            country: "",
+            location: "",
+            tags: [],
+            students: [],
+            schedule: {
+              day: "",
+              hour: "",
+              minute: "",
+              timezone: "",
+            },
+          });
+
+          const isRecording = ref(false);
+          const loading = ref(false);
+          let stream = null;
+
+          let audioContext, analyser, microphone, processor;
+          let mediaRecorder,
+            audioChunks = [],
+            silenceTimeout;
+
+          const log = (message) => {
+            if (logs.value.length > 50) logs.value.shift();
+            logs.value.push({
+              timestamp: new Date().toLocaleTimeString(),
+              message,
+            });
+          };
+
+          const toast = (msg) => {
+            toastMessage.value = msg;
+            const toastEl = document.getElementById("toast");
+            toastEl.style.display = "block";
+            setTimeout(() => {
+              toastEl.style.display = "none";
+            }, 2000);
+          };
+
+          const clearLogs = () => {
+            logs.value = [];
+            log("Logs cleared");
+          };
+
+          const exportLogs = () => {
+            const content = logs.value
+              .map((log) => `${log.timestamp} - ${log.message}`)
+              .join("\n");
+            const blob = new Blob([content], { type: "text/plain" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "logs.txt";
+            a.click();
+          };
+
+          const startListening = async () => {
+            audioContext = new AudioContext();
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            microphone = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            processor = audioContext.createScriptProcessor(2048, 1, 1);
+
+            microphone.connect(analyser);
+            analyser.connect(processor);
+            processor.connect(audioContext.destination);
+
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+
+            mediaRecorder.onstop = () => {
+              log("Recording stopped");
+              toast("Recording stopped");
+              isRecording.value = false;
+              sendToWhisper();
+            };
+
+            processor.onaudioprocess = () => {
+              const buffer = new Uint8Array(analyser.fftSize);
+              analyser.getByteTimeDomainData(buffer);
+              const max = Math.max(...buffer);
+              const voiceDetected = max > 130;
+
+              if (voiceDetected) {
+                if (!isRecording.value) {
+                  log("Recording started");
+                  toast("Recording started");
+                  audioChunks = [];
+                  mediaRecorder.start();
+                  isRecording.value = true;
+                }
+                clearTimeout(silenceTimeout);
+                silenceTimeout = setTimeout(() => {
+                  if (isRecording.value) {
+                    mediaRecorder.stop(); // triggers onstop
+                  }
+                  processor.disconnect();
+                  analyser.disconnect();
+                  microphone.disconnect();
+                  audioContext.close();
+                  if (stream) {
+                    stream.getTracks().forEach((track) => track.stop());
+                    stream = null;
+                  }
+                  listening.value = false;
+                  log("Stopped listening after 1s silence");
+                  toast("Stopped listening after 1s silence");
+                }, 1000);
+              }
+            };
+
+            listening.value = true;
+            log("Listening started");
+          };
+
+          const stopListening = () => {
+            processor.disconnect();
+            analyser.disconnect();
+            microphone.disconnect();
+            audioContext.close();
+            if (stream) {
+              stream.getTracks().forEach((track) => track.stop());
+              stream = null;
+            }
+            listening.value = false;
+            log("Listening stopped");
+            toast("Listening stopped");
+          };
+
+          async function submitTranscript() {
+            if (transcriptText.value.trim() === "") {
+              toast("Transcript is empty");
+              return;
+            }
+            log("Updating class details");
+            loading.value = true;
+            const updateRes = await fetch(
+              "http://localhost:3000/update-class",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  instruction: transcriptText.value,
+                  original: classDetails.value,
+                }),
+              }
+            );
+            const { updated } = await updateRes.json();
+            classDetails.value = updated;
+            loading.value = false;
+
+            log("Updated classDetails: " + JSON.stringify(updated));
+            log("Applied class changes");
+          }
+
+          const sendToWhisper = async () => {
+            const blob = new Blob(audioChunks, { type: "audio/webm" });
+            const formData = new FormData();
+            formData.append("file", blob, "audio.webm");
+
+            try {
+              log("Transcription started");
+              const res = await fetch("http://localhost:3000/whisper", {
+                method: "POST",
+                body: formData,
+              });
+
+              const { instruction } = await res.json();
+
+              transcriptText.value = instruction;
+
+              log("Transcription done");
+              log("Transcript: " + instruction);
+
+              await submitTranscript(); // Fixed the function call to match the defined function
+              log("Transcript submitted");
+            } catch (err) {
+              loading.value = false;
+              log("Error: " + err.message);
+              toast("Error: " + err.message);
+            }
+          };
+
+          return {
+            listening,
+            startListening,
+            stopListening,
+            clearLogs,
+            exportLogs,
+            logs,
+            logExpanded,
+            toastMessage,
+            classDetails,
+            isRecording,
+            loading,
+            transcriptText,
+            submitTranscript,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

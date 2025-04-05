@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Voice JSON Editor</title>
+    <script src="https://unpkg.com/vue@3"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        padding: 2rem;
+      }
+      #toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #323232;
+        color: #fff;
+        padding: 10px 16px;
+        border-radius: 6px;
+        opacity: 0.9;
+        display: none;
+      }
+      .mic-pulse i {
+        animation: pulse 1s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          color: red;
+        }
+        50% {
+          transform: scale(1.3);
+          color: darkred;
+        }
+        100% {
+          transform: scale(1);
+          color: red;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="container">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+              <a class="nav-link" href="/">Token Probabilities</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link active" href="audio.html">JSON Voice Editor</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="class-editor.html">Class Editor</a>
+            </li>
+          </ul>
+          <li class="nav-item">
+            <a class="nav-link" href="paste.html">Translate</a>
+          </li>
+        </div>
+      </nav>
+
+      <h2 class="mb-4">
+        <span :class="{ 'mic-pulse': isRecording }"
+          ><i class="bi bi-mic-fill"></i
+        ></span>
+        Voice JSON Editor
+      </h2>
+
+      <div class="mb-3">
+        <button
+          class="btn btn-success me-2"
+          @click="startListening"
+          :disabled="listening"
+        >
+          <i class="bi bi-mic-fill"></i> Start Listening
+        </button>
+        <button
+          class="btn btn-danger me-2"
+          @click="stopListening"
+          :disabled="!listening"
+        >
+          <i class="bi bi-mic-mute-fill"></i> Stop Listening
+        </button>
+        <button class="btn btn-warning me-2" @click="clearLogs">
+          <i class="bi bi-trash"></i> Clear Logs
+        </button>
+        <button class="btn btn-info text-white" @click="exportLogs">
+          <i class="bi bi-download"></i> Export Logs
+        </button>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-6">
+          <div class="card">
+            <div class="card-header bg-primary text-white">
+              <i class="bi bi-file-earmark-text"></i> Original JSON
+            </div>
+            <div class="card-body">
+              <pre>{{ JSON.stringify(originalJson, null, 2) }}</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-6 mb-6">
+          <div class="card">
+            <div class="card-header bg-success text-white">
+              <i class="bi bi-file-earmark-diff"></i> Updated JSON
+            </div>
+            <div class="card-body">
+              <pre v-if="!loading">
+{{ JSON.stringify(updatedJson, null, 2) }}</pre
+              >
+              <div v-else class="text-center">
+                <div class="spinner-border text-success" role="status"></div>
+                <p>Updating JSON...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div
+          class="card-header bg-dark text-white"
+          @click="logExpanded = !logExpanded"
+          style="cursor: pointer"
+        >
+          <i class="bi" :class="logExpanded ? 'bi-eye-slash' : 'bi-eye' "></i>
+          Logs (click to {{ logExpanded ? 'hide' : 'show' }})
+        </div>
+        <ul class="list-group list-group-flush" v-if="logExpanded">
+          <li
+            class="list-group-item"
+            v-for="(entry, index) in logs"
+            :key="index"
+          >
+            <strong>{{ entry.timestamp }}</strong>: {{ entry.message }}
+          </li>
+        </ul>
+      </div>
+      <div id="toast">{{ toastMessage }}</div>
+    </div>
+
+    <script>
+      const { createApp, ref } = Vue;
+
+      createApp({
+        setup() {
+          const listening = ref(false);
+          const logs = ref([]);
+          const updatedJson = ref({});
+          const logExpanded = ref(true);
+          const toastMessage = ref("");
+          const originalJson = ref({ name: "John", age: 30, isActive: true });
+          const isRecording = ref(false);
+          const loading = ref(false);
+          let stream = null;
+
+          let audioContext, analyser, microphone, processor;
+          let mediaRecorder,
+            audioChunks = [],
+            silenceTimeout;
+
+          const log = (message) => {
+            if (logs.value.length > 50) logs.value.shift();
+            logs.value.push({
+              timestamp: new Date().toLocaleTimeString(),
+              message,
+            });
+          };
+
+          const toast = (msg) => {
+            toastMessage.value = msg;
+            const toastEl = document.getElementById("toast");
+            toastEl.style.display = "block";
+            setTimeout(() => {
+              toastEl.style.display = "none";
+            }, 2000);
+          };
+
+          const clearLogs = () => {
+            logs.value = [];
+            log("Logs cleared");
+          };
+
+          const exportLogs = () => {
+            const content = logs.value
+              .map((log) => `${log.timestamp} - ${log.message}`)
+              .join("\n");
+            const blob = new Blob([content], { type: "text/plain" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "logs.txt";
+            a.click();
+          };
+
+          const startListening = async () => {
+            audioContext = new AudioContext();
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+            });
+            microphone = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            processor = audioContext.createScriptProcessor(2048, 1, 1);
+
+            microphone.connect(analyser);
+            analyser.connect(processor);
+            processor.connect(audioContext.destination);
+
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+
+            mediaRecorder.onstop = () => {
+              log("Recording stopped");
+              toast("Recording stopped");
+              isRecording.value = false;
+              sendToWhisper();
+            };
+
+            processor.onaudioprocess = () => {
+              const buffer = new Uint8Array(analyser.fftSize);
+              analyser.getByteTimeDomainData(buffer);
+              const max = Math.max(...buffer);
+              const voiceDetected = max > 130;
+
+              if (voiceDetected) {
+                if (!isRecording.value) {
+                  log("Recording started");
+                  toast("Recording started");
+                  audioChunks = [];
+                  mediaRecorder.start();
+                  isRecording.value = true;
+                }
+                clearTimeout(silenceTimeout);
+                silenceTimeout = setTimeout(() => {
+                  if (isRecording.value) {
+                    mediaRecorder.stop(); // triggers onstop
+                  }
+
+                  processor.disconnect();
+                  analyser.disconnect();
+                  microphone.disconnect();
+                  audioContext.close();
+
+                  if (stream) {
+                    stream.getTracks().forEach((track) => track.stop()); // ✅ stop mic
+                    stream = null;
+                  }
+
+                  listening.value = false;
+                  log("Stopped listening after 3s silence");
+                  toast("Stopped listening after 3s silence");
+                }, 3000);
+              }
+            };
+
+            listening.value = true;
+            log("Listening started");
+          };
+
+          const stopListening = () => {
+            processor.disconnect();
+            analyser.disconnect();
+            microphone.disconnect();
+            audioContext.close();
+
+            if (stream) {
+              stream.getTracks().forEach((track) => track.stop());
+              stream = null;
+            }
+            listening.value = false;
+            log("Listening stopped");
+            toast("Listening stopped");
+          };
+
+          const sendToWhisper = async () => {
+            const blob = new Blob(audioChunks, { type: "audio/webm" });
+            const formData = new FormData();
+            formData.append("file", blob, "audio.webm");
+
+            try {
+              log("Transcription started");
+              const res = await fetch("http://localhost:3000/whisper", {
+                method: "POST",
+                body: formData,
+              });
+              const { instruction } = await res.json();
+              log("Transcription done");
+              log("Transcript: " + instruction);
+
+              log("Updating object");
+              loading.value = true;
+              const updateRes = await fetch(
+                "http://localhost:3000/update-json",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    instruction,
+                    original: originalJson.value,
+                  }),
+                }
+              );
+              const { updated } = await updateRes.json();
+              updatedJson.value = updated;
+              loading.value = false;
+
+              log("Updated JSON: " + JSON.stringify(updated));
+              log("Applied object changes");
+            } catch (err) {
+              loading.value = false;
+              log("Error: " + err.message);
+              toast("Error: " + err.message);
+            }
+          };
+
+          return {
+            listening,
+            startListening,
+            stopListening,
+            clearLogs,
+            exportLogs,
+            logs,
+            logExpanded,
+            toastMessage,
+            originalJson,
+            updatedJson,
+            isRecording,
+            loading,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
