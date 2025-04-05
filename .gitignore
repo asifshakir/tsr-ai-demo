@@ -4,3 +4,4 @@ uploads/
 .env
 service-account.json
 package-lock.json
+cache/

@@ -7,8 +7,10 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import fs from "fs";
 
-import { initRAG, getChain } from "./rag/initRag.js";
+import { initRAGs, getChainForNamespace, getNamespaces } from "./rag/initRag.js";
+
 import { registerRoutes } from "./routes/index.js";
+
 import { logger } from "./utils/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,21 +24,27 @@ app.use(bodyParser.json());
 app.use(express.static(join(__dirname, "public")));
 app.use("/pdfs", express.static(join(__dirname, "pdfs")));
 
-app.get("/health", (req, res) => res.send("OK"));
+await initRAGs();
 
-await initRAG();
+app.get("/namespaces", (req, res) => {
+  res.json(getNamespaces());
+});
+
+app.post("/ask", async (req, res) => {
+  const { question, namespace } = req.body;
+  const chain = getChainForNamespace(namespace);
+
+  if (!chain) return res.status(400).json({ error: `Namespace '${namespace}' not loaded` });
+
+  try {
+    const result = await chain.invoke({ query: question });
+    res.json({ answer: result.text, citations: result.sourceDocuments || [] });
+  } catch (err) {
+    logger.error("Error answering question", { message: err.message, stack: err.stack });
+    res.status(500).send("Internal error");
+  }
+});
+
 registerRoutes(app);
 
-app.listen(port, () =>
-  logger.info(`Server running at http://localhost:${port}`)
-);
-
-process.on("SIGINT", () => {
-  logger.info("Shutting down server...");
-  process.exit();
-});
-
-process.on("SIGTERM", () => {
-  logger.info("Shutting down server...");
-  process.exit();
-});
+app.listen(port, () => logger.info(`Server running at http://localhost:${port}`));

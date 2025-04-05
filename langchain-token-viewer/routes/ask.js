@@ -1,22 +1,33 @@
-// routes/ask.js
 import express from "express";
-import { getChain } from "../rag/initRag.js";
+import { getChainForNamespace, getNamespaces } from "../rag/initRag.js";
 import { logger } from "../utils/logger.js";
 
 export const askRouter = express.Router();
 
-// Status check endpoint
+// Health check
 askRouter.get("/status", (req, res) => {
-  const chain = getChain();
-  if (chain) return res.send("RAG chain is initialized ✅");
-  res.status(500).send("RAG chain not ready ❌");
+  res.send("RAG system is running ✅");
 });
 
-askRouter.post("/", async (req, res) => {
-  const chain = getChain();
-  const { question } = req.body;
+// List all available vector store namespaces
+askRouter.get("/namespaces", (req, res) => {
+  try {
+    const namespaces = getNamespaces();
+    res.json({ namespaces });
+  } catch (err) {
+    logger.error("Error fetching namespaces", { message: err.message });
+    res.status(500).json({ error: "Failed to fetch namespaces" });
+  }
+});
 
-  if (!chain) return res.status(500).send("RAG model not ready");
+// Ask a question using a specific namespace
+askRouter.post("/", async (req, res) => {
+  const { question, namespace } = req.body;
+  const chain = getChainForNamespace(namespace);
+
+  if (!chain) {
+    return res.status(400).json({ error: `Namespace '${namespace}' not loaded` });
+  }
 
   try {
     const result = await chain.invoke({ query: question });
@@ -28,18 +39,13 @@ askRouter.post("/", async (req, res) => {
         index: i + 1,
         source,
         snippet: doc.pageContent.slice(0, 200),
-        anchor: `${source}#page=${page}`
+        anchor: `${source}#page=${page}`,
       };
     }) || [];
 
     res.json({ answer: result.text, citations });
   } catch (err) {
     logger.error("Error handling question", { message: err.message, stack: err.stack });
-    if (err.message.includes("Invalid API key")) {
-      return res.status(401).send("Invalid OpenAI API key");
-    } else if (err.message.includes("Rate limit")) {
-      return res.status(429).send("Rate limit exceeded. Please try again later.");
-    }
     res.status(500).send("Error during question handling");
   }
 });
